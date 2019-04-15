@@ -1,5 +1,6 @@
 .idea/
 bin/
+build/
 .project
 .classpath
 .DS_Store
