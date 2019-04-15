@@ -1,0 +1,9 @@
+.idea/
+bin/
+.project
+.classpath
+.DS_Store
+*/.DS_Store
+optimised/
+test-reports/
+out1
