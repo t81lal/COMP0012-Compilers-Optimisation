@@ -48,19 +48,10 @@ public class ConstantFolder {
 	}
 
 	private boolean optimise(MethodGen mg) {
-//		ReachingDefinitionsAnalysis rda = new ReachingDefinitionsAnalysis(mg);
-//		rda.solve();
-
-//		FrameAnalysis fa = new FrameAnalysis(mg);
-//		fa.solve();
-//		InstructionList list = mg.getInstructionList();
-//		for (InstructionHandle ih = list.getStart(); ih != null; ih = ih.getNext()) {
-//			System.out.printf("%-25s : %-50s %-50s\n", ih, rda.getInFact(ih), rda.getOutFact(ih));
-//			System.out.print(fa.getInFact(ih));
-//			System.out.println("=============");
-//		}
-		
-		return false;
+		boolean change = false;
+		change |= propagateConstants(mg);
+		change |= removeDeadAssignments(mg);
+		return change;
 	}
 	
 	private boolean removeDeadAssignments(MethodGen mg) {
@@ -70,6 +61,7 @@ public class ConstantFolder {
 		FrameAnalysis fa = new FrameAnalysis(mg);
 		fa.solve();
 
+		boolean change = false;
 		InstructionList list = mg.getInstructionList();
 		for (InstructionHandle ih = list.getStart(); ih != null; ih = ih.getNext()) {
 			Instruction i = ih.getInstruction();
@@ -86,14 +78,15 @@ public class ConstantFolder {
 					Value v = pv.getCoreValue();
 					if(v instanceof ConstantValue) {
 						InstructionHandle cstProducer = pv.getProducer();
-						
+						cstProducer.setInstruction(new NOP());
+						ih.setInstruction(new NOP());
+						change = true;
 					}
 				}
 			}
 		}
 		
-		return true;
-		
+		return change;
 	}
 	
 	private boolean propagateConstants(MethodGen mg) {
@@ -108,7 +101,8 @@ public class ConstantFolder {
 			Instruction i = ih.getInstruction();
 			if(i instanceof LoadInstruction) {
 				LoadInstruction li = (LoadInstruction) i;
-				Value val = fa.getInFact(ih).getLocal(li.getIndex());
+				ProducedValue pv = (ProducedValue) fa.getInFact(ih).getLocal(li.getIndex());
+				Value val = pv.getCoreValue();
 				if(val instanceof ConstantValue) {
 					Object cst = ((ConstantValue) val).getConstant();
 					if(cst instanceof Number) {
