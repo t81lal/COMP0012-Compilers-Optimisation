@@ -4,20 +4,13 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Iterator;
-import java.util.Map;
 
 import org.apache.bcel.classfile.ClassParser;
-import org.apache.bcel.classfile.Code;
 import org.apache.bcel.classfile.JavaClass;
 import org.apache.bcel.classfile.Method;
-import org.apache.bcel.generic.ClassGen;
-import org.apache.bcel.generic.ConstantPoolGen;
-import org.apache.bcel.generic.InstructionHandle;
-import org.apache.bcel.generic.InstructionList;
-import org.apache.bcel.util.InstructionFinder;
-import org.apache.bcel.generic.MethodGen;
-import org.apache.bcel.generic.TargetLostException;
+import org.apache.bcel.generic.*;
+
+import comp0012.main.Value.ConstantValue;
 
 public class ConstantFolder {
 	ClassParser parser = null;
@@ -28,9 +21,9 @@ public class ConstantFolder {
 
 	public ConstantFolder(String classFilePath) {
 		try {
-			this.parser = new ClassParser(classFilePath);
-			this.original = this.parser.parse();
-			this.gen = new ClassGen(this.original);
+			parser = new ClassParser(classFilePath);
+			original = parser.parse();
+			gen = new ClassGen(original);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -45,30 +38,44 @@ public class ConstantFolder {
 			MethodGen mg = new MethodGen(m, gen.getClassName(), cpgen);
 			optimise(mg);
 		}
-		this.optimized = gen.getJavaClass();
+		optimized = gen.getJavaClass();
 	}
 
 	private void optimise(MethodGen mg) {
-		DataFlowAnalysis<String> df = new DataFlowAnalysis<String>(mg) {
-			
-			@Override
-			protected String transfer(InstructionHandle ins, String curFact) {
-				// TODO Auto-generated method stub
-				return null;
+		FrameAnalysis fa = new FrameAnalysis(mg);
+		fa.solve();
+		ConstantPoolGen cpg = mg.getConstantPool();
+		
+		InstructionList list = mg.getInstructionList();
+		for (InstructionHandle ih = list.getStart(); ih != null; ih = ih.getNext()) {
+			Instruction i = ih.getInstruction();
+			if(i instanceof LoadInstruction) {
+				LoadInstruction li = (LoadInstruction) i;
+				Value val = fa.getFact(ih).getLocal(li.getIndex());
+				if(val instanceof ConstantValue) {
+					Object cst = ((ConstantValue) val).getConstant();
+					if(cst instanceof Number) {
+						
+					}
+				}
 			}
-			
-			@Override
-			protected String merge(String in1, String in2) {
-				// TODO Auto-generated method stub
-				return null;
-			}
-			
-			@Override
-			protected Map<InstructionHandle, String> getInputFacts() {
-				// TODO Auto-generated method stub
-				return null;
-			}
-		};
+		}
+	}
+	
+	private int setInstruction(ConstantPoolGen cpg, InstructionHandle ih, Number n) {
+		Instruction i;
+		if(n instanceof Float) {
+			i = new LDC(cpg.addFloat(n.floatValue()));
+		} else if(n instanceof Integer) {
+			i = new LDC(cpg.addInteger(n.intValue()));
+		} else if(n instanceof Double) {
+			i = new LDC2_W(cpg.addDouble(n.doubleValue()));
+		} else if(n instanceof Long) {
+			i = new LDC2_W(cpg.addLong(n.longValue()));
+		} else {
+			return 0;
+		}
+		return 1;
 	}
 
 	public void write(String optimisedFilePath) {
@@ -77,7 +84,7 @@ public class ConstantFolder {
 		try {
 			FileOutputStream out = new FileOutputStream(
 					new File(optimisedFilePath));
-			this.optimized.dump(out);
+			optimized.dump(out);
 		} catch (FileNotFoundException e) {
 			// Auto-generated catch block
 			e.printStackTrace();
