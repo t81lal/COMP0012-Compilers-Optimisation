@@ -33,7 +33,9 @@ public class ConstantFolder {
 
 	public void optimize() {
 		ConstantPoolGen cpgen = gen.getConstantPool();
-		for (Method m : gen.getMethods()) {
+		Method[] methods = gen.getMethods();
+		for (int i=0; i < methods.length; i++) {
+			Method m = methods[i];
 			if(!(gen.getClassName() + "." + m.getName()).equals("comp0012.target.ConstantVariableFolding.methodOne"))
 				continue;
 			System.out.println(gen.getClassName() + "." + m.getName());
@@ -43,6 +45,7 @@ public class ConstantFolder {
 				change = false;
 				change = optimise(mg);
 			} while(change);
+			gen.setMethodAt(mg.getMethod(), i);
 		}
 		optimized = gen.getJavaClass();
 	}
