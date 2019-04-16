@@ -77,8 +77,10 @@ public class ConstantFolder {
 					ProducedValue pv = (ProducedValue) inFrame.peek();
 					Value v = pv.getCoreValue();
 					if(v instanceof ConstantValue) {
-						InstructionHandle cstProducer = pv.getProducer();
-						cstProducer.setInstruction(new NOP());
+						Set<InstructionHandle> cstProducers = pv.getProducers();
+						for(InstructionHandle p : cstProducers) {
+							p.setInstruction(new NOP());
+						}
 						ih.setInstruction(new NOP());
 						change = true;
 					}

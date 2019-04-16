@@ -1,6 +1,8 @@
 package comp0012.main;
 
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 import org.apache.bcel.generic.InstructionHandle;
 import org.apache.bcel.generic.Type;
@@ -96,7 +98,7 @@ public interface Value {
 
 		@Override
 		public Value merge(Value v) {
-			if(v.getType().equals(type)) {
+			if(v.getType().getSize() != type.getSize()) {
 				throw new UnsupportedOperationException();
 			}
 			if(v instanceof ConstantValue) {
@@ -143,14 +145,14 @@ public interface Value {
 	
 	public class ProducedValue implements Value {
 		private final Value val;
-		private final InstructionHandle ih;
-		public ProducedValue(Value val, InstructionHandle ih) {
+		private final Set<InstructionHandle> producers;
+		public ProducedValue(Value val, Set<InstructionHandle> producers) {
 			this.val = val;
-			this.ih = ih;
+			this.producers = producers;
 		}
 		
-		public InstructionHandle getProducer() {
-			return ih;
+		public Set<InstructionHandle> getProducers() {
+			return producers;
 		}
 		
 		public Value getInnerValue() {
@@ -172,14 +174,21 @@ public interface Value {
 
 		@Override
 		public Value merge(Value v) {
-			return val.merge(v);
+			if(v instanceof ProducedValue) {
+				ProducedValue pv = new ProducedValue(val.merge(v), new HashSet<>());
+				pv.producers.addAll(producers);
+				pv.producers.addAll(((ProducedValue) v).producers);
+				return pv;
+			} else {
+				throw new UnsupportedOperationException(this + " | " + v);
+			}
 		}
 		
 		@Override
 		public boolean equals(Object o) {
 			if(o instanceof ProducedValue) {
 				ProducedValue pv = (ProducedValue) o;
-				return Objects.equals(pv.val, val) && Objects.equals(pv.ih, ih);
+				return Objects.equals(pv.val, val) && Objects.equals(pv.producers, producers);
 			} else {
 				return false;
 			}
@@ -187,12 +196,12 @@ public interface Value {
 		
 		@Override
 		public int hashCode() {
-			return Objects.hash(val, ih);
+			return Objects.hash(val, producers);
 		}
 		
 		@Override
 		public String toString() {
-			return val + " @ " + ih;
+			return val + " @ " + producers;
 		}
 	}
 }

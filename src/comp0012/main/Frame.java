@@ -1,6 +1,7 @@
 package comp0012.main;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedList;
 
 import org.apache.bcel.generic.InstructionHandle;
@@ -11,6 +12,10 @@ import org.apache.bcel.generic.Type;
 import comp0012.main.Value.ProducedValue;
 import comp0012.main.Value.TopValue;
 
+/**
+ * Represents the state of the local variables and execution stack of the JVM at a single point in time. <br>
+ * The runtime values of variables and stack slots are symbolically represented using {@link Value}'s.
+ */
 public class Frame {
 
 	final Value[] locals;
@@ -51,25 +56,30 @@ public class Frame {
 	public void push(Value v) {
 		stack.push(v);
 	}
-	
+
 	public void push(Value v, InstructionHandle pos) {
-		push(new ProducedValue(v, pos));
+		push(new ProducedValue(v, Collections.singleton(pos)));
 	}
-	
+
 	@Override
 	public String toString() {
 		StringBuilder sb = new StringBuilder();
 		sb.append("Locals:\n");
-		for(int i=0; i < locals.length; i++) {
+		for (int i = 0; i < locals.length; i++) {
 			sb.append(i).append(" :: ").append(locals[i]).append("\n");
 		}
 		sb.append("Stack:\n");
-		for(Value v : stack) {
+		for (Value v : stack) {
 			sb.append(v).append("\n");
 		}
 		return sb.toString();
 	}
 
+	/**
+	 * Generate the initial frame on entry to a method.
+	 * @param mg The method to generate the frame for.
+	 * @return The frame.
+	 */
 	public static Frame makeFrame(MethodGen mg) {
 		Frame frame0 = new Frame(mg.getMaxLocals());
 		int idx = 0;
@@ -83,11 +93,11 @@ public class Frame {
 		}
 		return frame0;
 	}
-	
+
 	public static Frame merge(Frame f1, Frame f2) {
 		Frame merged = new Frame(f1.locals.length);
 		if (f1.stack.size() != f2.stack.size()) {
-			throw new IllegalArgumentException();
+			throw new IllegalArgumentException("Stack height mismatch");
 		} else {
 			for (int i = 0; i < f1.stack.size(); i++) {
 				merged.stack.set(i, f1.stack.get(i).merge(f2.stack.get(i)));
