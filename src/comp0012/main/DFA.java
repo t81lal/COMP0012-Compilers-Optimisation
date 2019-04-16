@@ -25,8 +25,12 @@ public abstract class DFA<F> {
 		outFacts = new HashMap<>();
 	}
 
-	public F getFact(InstructionHandle ih) {
+	public F getInFact(InstructionHandle ih) {
 		return backwards ? outFacts.get(ih) : inFacts.get(ih);
+	}
+	
+	public F getOutFact(InstructionHandle ih) {
+		return backwards ? inFacts.get(ih) : outFacts.get(ih);
 	}
 
 	public void solve() {
@@ -55,7 +59,7 @@ public abstract class DFA<F> {
 	private F merge(InstructionHandle ih) {
 		Set<InstructionHandle> preds = backwards ? graph.getSuccessors(ih) : graph.getPredecessors(ih);
 		if (preds.size() == 0) {
-			return emptyFact();
+			return copyFact(inFacts.get(ih));
 		} else if (preds.size() == 1) {
 			InstructionHandle pred = preds.iterator().next();
 			F predOut = outFacts.get(pred);

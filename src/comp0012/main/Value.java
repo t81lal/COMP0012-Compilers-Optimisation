@@ -2,6 +2,7 @@ package comp0012.main;
 
 import java.util.Objects;
 
+import org.apache.bcel.generic.InstructionHandle;
 import org.apache.bcel.generic.Type;
 
 public interface Value {
@@ -137,6 +138,61 @@ public interface Value {
 		@Override
 		public String toString() {
 			return cst + " :: " + type;
+		}
+	}
+	
+	public class ProducedValue implements Value {
+		private final Value val;
+		private final InstructionHandle ih;
+		public ProducedValue(Value val, InstructionHandle ih) {
+			this.val = val;
+			this.ih = ih;
+		}
+		
+		public InstructionHandle getProducer() {
+			return ih;
+		}
+		
+		public Value getInnerValue() {
+			return val;
+		}
+		
+		public Value getCoreValue() {
+			if(val instanceof ProducedValue) {
+				return ((ProducedValue) val).getCoreValue();
+			} else {
+				return val;
+			}
+		}
+		
+		@Override
+		public Type getType() {
+			return val.getType();
+		}
+
+		@Override
+		public Value merge(Value v) {
+			return val.merge(v);
+		}
+		
+		@Override
+		public boolean equals(Object o) {
+			if(o instanceof ProducedValue) {
+				ProducedValue pv = (ProducedValue) o;
+				return Objects.equals(pv.val, val) && Objects.equals(pv.ih, ih);
+			} else {
+				return false;
+			}
+		}
+		
+		@Override
+		public int hashCode() {
+			return Objects.hash(val, ih);
+		}
+		
+		@Override
+		public String toString() {
+			return val + " @ " + ih;
 		}
 	}
 }

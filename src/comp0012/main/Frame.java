@@ -3,10 +3,12 @@ package comp0012.main;
 import java.util.Arrays;
 import java.util.LinkedList;
 
+import org.apache.bcel.generic.InstructionHandle;
 import org.apache.bcel.generic.MethodGen;
 import org.apache.bcel.generic.ObjectType;
 import org.apache.bcel.generic.Type;
 
+import comp0012.main.Value.ProducedValue;
 import comp0012.main.Value.TopValue;
 
 public class Frame {
@@ -48,6 +50,10 @@ public class Frame {
 
 	public void push(Value v) {
 		stack.push(v);
+	}
+	
+	public void push(Value v, InstructionHandle pos) {
+		push(new ProducedValue(v, pos));
 	}
 	
 	@Override
