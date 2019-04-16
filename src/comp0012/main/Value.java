@@ -179,6 +179,8 @@ public interface Value {
 				pv.producers.addAll(producers);
 				pv.producers.addAll(((ProducedValue) v).producers);
 				return pv;
+			} else if(v instanceof TopValue) {
+				return val.merge(v);
 			} else {
 				throw new UnsupportedOperationException(this + " | " + v);
 			}

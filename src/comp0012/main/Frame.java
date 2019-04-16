@@ -3,6 +3,7 @@ package comp0012.main;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
+import java.util.Objects;
 
 import org.apache.bcel.generic.InstructionHandle;
 import org.apache.bcel.generic.MethodGen;
@@ -97,15 +98,48 @@ public class Frame {
 	public static Frame merge(Frame f1, Frame f2) {
 		Frame merged = new Frame(f1.locals.length);
 		if (f1.stack.size() != f2.stack.size()) {
+			System.err.println("F1:");
+			System.err.print(f1);
+			System.err.println("===================\nF2:");
+			System.err.print(f2);
 			throw new IllegalArgumentException("Stack height mismatch");
 		} else {
 			for (int i = 0; i < f1.stack.size(); i++) {
-				merged.stack.set(i, f1.stack.get(i).merge(f2.stack.get(i)));
+				merged.stack.push(f1.stack.get(i).merge(f2.stack.get(i)));
 			}
 		}
 		for (int i = 0; i < merged.locals.length; i++) {
-			merged.locals[i] = f1.locals[i].merge(f2.locals[i]);
+			Value l1 = f1.locals[i],
+				  l2 = f2.locals[i];
+			if(l1 == null) {
+				if(l2 == null) {
+					merged.locals[i] = null;
+				} else {
+					throw new IllegalStateException("l1 null, l2 nonnull");
+				}
+			} else {
+				if(l2 == null) {
+					throw new IllegalStateException("l2 null, l1 nonnull");
+				} else {
+					merged.locals[i] = l1.merge(l2);
+				}
+			}
 		}
 		return merged;
+	}
+	
+	@Override
+	public boolean equals(Object o) {
+		if(o instanceof Frame) {
+			Frame f = (Frame) o;
+			return Arrays.equals(locals, f.locals) && Objects.equals(stack, f.stack);
+		} else {
+			return false;
+		}
+	}
+	
+	@Override
+	public int hashCode() {
+		return Objects.hash(locals, stack);
 	}
 }

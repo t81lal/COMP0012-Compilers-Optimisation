@@ -36,8 +36,8 @@ public class ConstantFolder {
 		Method[] methods = gen.getMethods();
 		for (int i=0; i < methods.length; i++) {
 			Method m = methods[i];
-			if(!(gen.getClassName() + "." + m.getName()).equals("comp0012.target.ConstantVariableFolding.methodOne"))
-				continue;
+//			if(!(gen.getClassName() + "." + m.getName()).equals("comp0012.target.DynamicVariableFolding.methodTwo"))
+//				continue;
 			System.out.println(gen.getClassName() + "." + m.getName());
 			MethodGen mg = new MethodGen(m, gen.getClassName(), cpgen);
 			boolean change;
@@ -106,12 +106,16 @@ public class ConstantFolder {
 			Instruction i = ih.getInstruction();
 			if(i instanceof LoadInstruction) {
 				LoadInstruction li = (LoadInstruction) i;
-				ProducedValue pv = (ProducedValue) fa.getInFact(ih).getLocal(li.getIndex());
-				Value val = pv.getCoreValue();
-				if(val instanceof ConstantValue) {
-					Object cst = ((ConstantValue) val).getConstant();
-					if(cst instanceof Number) {
-						change |= setInstruction(cpg, ih, (Number) cst);
+				Value top = fa.getInFact(ih).getLocal(li.getIndex());
+				/* If it's not produced, it was defined as a parameter */
+				if(top instanceof ProducedValue) {
+					ProducedValue pv = (ProducedValue) top;
+					Value val = pv.getCoreValue();
+					if(val instanceof ConstantValue) {
+						Object cst = ((ConstantValue) val).getConstant();
+						if(cst instanceof Number) {
+							change |= setInstruction(cpg, ih, (Number) cst);
+						}
 					}
 				}
 			}

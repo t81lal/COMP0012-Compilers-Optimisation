@@ -1,6 +1,7 @@
 package comp0012.main;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
@@ -46,10 +47,17 @@ public abstract class DFA<F> {
 			inFacts.put(ih, in);
 			F newOut = transfer(ih, in);
 			if (!outFacts.containsKey(ih) || !outFacts.get(ih).equals(newOut)) {
+//				if(outFacts.containsKey(ih) && !outFacts.get(ih).equals(newOut)) {
+//					System.out.println("==========+=========");
+//					System.out.print(outFacts.get(ih));
+//					System.out.println("===================");
+//					System.out.println(newOut);
+//					System.out.println("===================");
+//				}
 				outFacts.put(ih, newOut);
 				for (InstructionHandle succ : backwards ? graph.getPredecessors(ih) : graph.getSuccessors(ih)) {
 					if (!wl.contains(succ)) {
-						wl.push(succ);
+						wl.addLast(succ);
 					}
 				}
 			}
@@ -67,9 +75,17 @@ public abstract class DFA<F> {
 			return x;
 		} else {
 			Iterator<InstructionHandle> predIt = preds.iterator();
-			F curIn = merge(outFacts.get(predIt.next()), outFacts.get(predIt.next()));
-			while (predIt.hasNext()) {
-				curIn = merge(curIn, outFacts.get(predIt.next()));
+			Set<F> fs = new HashSet<>();
+			while(predIt.hasNext()) {
+				InstructionHandle p = predIt.next();
+				if(outFacts.containsKey(p)) {
+					fs.add(outFacts.get(p));
+				}
+			}
+			Iterator<F> fIt = fs.iterator();
+			F curIn = copyFact(fIt.next());
+			while(fIt.hasNext()) {
+				curIn = merge(curIn, fIt.next());
 			}
 			return curIn;
 		}
