@@ -71,7 +71,9 @@ public class StaticInterpreter {
 			}
 		} else if (i instanceof CPInstruction) {
 			Type type = ((CPInstruction) i).getType(cpg);
-			if (i instanceof ANEWARRAY || i instanceof CHECKCAST || i instanceof INSTANCEOF || i instanceof NEW) {
+			if(i instanceof NEW) {
+				cur.push(new TopValue(type), ih);
+			} else if (i instanceof ANEWARRAY || i instanceof CHECKCAST || i instanceof INSTANCEOF) {
 				cur.pop();
 				cur.push(new TopValue(type), ih);
 			} else if (i instanceof FieldOrMethod) {
