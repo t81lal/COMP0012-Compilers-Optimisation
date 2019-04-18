@@ -36,8 +36,8 @@ public class ConstantFolder {
 		Method[] methods = gen.getMethods();
 		for (int i=0; i < methods.length; i++) {
 			Method m = methods[i];
-//			if(!(gen.getClassName() + "." + m.getName()).equals("comp0012.target.DynamicVariableFolding.methodTwo"))
-//				continue;
+			if(!(gen.getClassName() + "." + m.getName()).equals("comp0012.target.DynamicVariableFolding.methodTwo"))
+				continue;
 			System.out.println(gen.getClassName() + "." + m.getName());
 			MethodGen mg = new MethodGen(m, gen.getClassName(), cpgen);
 			boolean change;
@@ -45,15 +45,43 @@ public class ConstantFolder {
 				change = false;
 				change = optimise(mg);
 			} while(change);
+			mg.removeNOPs();
+			System.out.println(mg.getInstructionList());
+//			mg.stripAttributes(true);
+			System.out.println(mg.getCodeAttributes()[0]);
 			gen.setMethodAt(mg.getMethod(), i);
 		}
 		optimized = gen.getJavaClass();
 	}
 
 	private boolean optimise(MethodGen mg) {
+		System.out.println(mg.getInstructionList());
 		boolean change = false;
 		change |= propagateConstants(mg);
+		change |= foldConstants(mg);
 		change |= removeDeadAssignments(mg);
+//		change |= removeDeadCode(mg);
+		System.out.println("==========");
+		System.out.println(mg.getInstructionList());
+		return change;
+	}
+	
+	private boolean removeDeadCode(MethodGen mg) {
+		InstructionGraph cfg = new InstructionGraph(mg);
+		boolean change = false;
+		InstructionHandle start = mg.getInstructionList().getStart();
+		for(InstructionHandle ih : mg.getInstructionList().getInstructionHandles()) {
+			if(ih.equals(start))
+				continue;
+			if(cfg.getPredecessors(ih).size() == 0) {
+				change = true;
+				try {
+					cfg.remove(ih);
+					mg.getInstructionList().delete(ih);
+				} catch (TargetLostException e) {
+				}
+			}
+		}
 		return change;
 	}
 	
@@ -66,7 +94,7 @@ public class ConstantFolder {
 
 		boolean change = false;
 		InstructionList list = mg.getInstructionList();
-		for (InstructionHandle ih = list.getStart(); ih != null; ih = ih.getNext()) {
+		for (InstructionHandle ih : list.getInstructionHandles()) {
 			Instruction i = ih.getInstruction();
 			if(i instanceof StoreInstruction) {
 				StoreInstruction si = (StoreInstruction) i;
@@ -80,10 +108,7 @@ public class ConstantFolder {
 					ProducedValue pv = (ProducedValue) inFrame.peek();
 					Value v = pv.getCoreValue();
 					if(v instanceof ConstantValue) {
-						Set<InstructionHandle> cstProducers = pv.getProducers();
-						for(InstructionHandle p : cstProducers) {
-							p.setInstruction(new NOP());
-						}
+						removeProducers(pv);
 						ih.setInstruction(new NOP());
 						change = true;
 					}
@@ -102,20 +127,16 @@ public class ConstantFolder {
 		InstructionList list = mg.getInstructionList();
 		boolean change = false;
 		
-		for (InstructionHandle ih = list.getStart(); ih != null; ih = ih.getNext()) {
+		for (InstructionHandle ih : list.getInstructionHandles()) {
 			Instruction i = ih.getInstruction();
 			if(i instanceof LoadInstruction) {
 				LoadInstruction li = (LoadInstruction) i;
-				Value top = fa.getInFact(ih).getLocal(li.getIndex());
-				/* If it's not produced, it was defined as a parameter */
-				if(top instanceof ProducedValue) {
-					ProducedValue pv = (ProducedValue) top;
-					Value val = pv.getCoreValue();
-					if(val instanceof ConstantValue) {
-						Object cst = ((ConstantValue) val).getConstant();
-						if(cst instanceof Number) {
-							change |= setInstruction(cpg, ih, (Number) cst);
-						}
+				Value local = fa.getInFact(ih).getLocal(li.getIndex());
+				ConstantValue constLocal = asConstantValue(local);
+				if(constLocal != null) {
+					Object cst = constLocal.getConstant();
+					if(cst instanceof Number) {
+						change |= replaceConstantInstruction(cpg, ih, (Number) cst);
 					}
 				}
 			}
@@ -123,7 +144,344 @@ public class ConstantFolder {
 		return change;
 	}
 	
-	private boolean setInstruction(ConstantPoolGen cpg, InstructionHandle ih, Number n) {
+	private boolean foldConstants(MethodGen mg) {
+		FrameAnalysis fa = new FrameAnalysis(mg);
+		fa.solve();
+		
+		ConstantPoolGen cpg = mg.getConstantPool();
+		InstructionList list = mg.getInstructionList();
+		boolean change = false;
+		for (InstructionHandle ih : list.getInstructionHandles()) {
+			Instruction i = ih.getInstruction();
+			int op = i.getOpcode();
+			Frame inFrame = fa.getInFact(ih);
+			
+			Number res = null;
+			int pops = 0;
+			
+			if(i instanceof ArithmeticInstruction) {
+				if(op >= 0x74 && op <= 0x77) {
+					// INEG, FNEG, DNEG, LNEG are unary
+					ConstantValue cv = asConstantValue(inFrame.peek());
+					if(cv != null) {
+						foldConstantNegation(op, cv);
+						pops = 1;
+					}
+				} else {
+					ConstantValue cv2 = asConstantValue(inFrame.peek());
+					ConstantValue cv1 = asConstantValue(inFrame.peek(1));
+					if(cv1 != null && cv2 != null) {
+						res = foldBinaryArithmeticOp(op, cv1, cv2);
+						pops = 2;
+					}
+				}
+			} else if(i instanceof ConversionInstruction) {
+				ConversionInstruction ci = (ConversionInstruction) i;
+				ConstantValue cv = asConstantValue(inFrame.peek());
+				if(cv != null) {
+					res = castConstant(cv, ci.getType(cpg));
+					pops = 1;
+				}
+			} else if(i instanceof IfInstruction) {
+				IfInstruction ifi = (IfInstruction) i;
+				boolean decided = false;
+				boolean decision = false;
+				if(op >= 0x99 && op <= 0x9e) {
+					ConstantValue cv = asConstantValue(inFrame.peek());
+					if(cv != null) {
+						decided = true;
+						decision = unaryConstantBranch(op, cv);
+						pops = 1;
+					}
+				} else {
+					if((op >= 0xa0 && op <= 0xa4) || op == 0x9f) {
+						ConstantValue cv2 = asConstantValue(inFrame.peek());
+						ConstantValue cv1 = asConstantValue(inFrame.peek(1));
+						if(cv1 != null && cv2 != null) {
+							decided = true;
+							decision = binaryConstantBranch(op, cv1, cv2);
+							System.out.println(op + " " + cv1 + " " + cv2);
+							System.out.println(decision);
+							pops = 2;
+						}
+					}
+				}
+				// Handle the actual modification here and pop args as usual below
+				if(decided) {
+					if(decision) {
+						ih.swapInstruction(new GOTO(ifi.getTarget().getPrev()));
+						InstructionFactory.create
+					} else {
+						ih.swapInstruction(new NOP());
+					}
+				}
+			} else if(i instanceof DCMPG || i instanceof DCMPL) {
+//				ConstantValue cv2 = asConstantValue(inFrame.peek());
+//				ConstantValue cv1 = asConstantValue(inFrame.peek(1));
+//				if(cv1 != null && cv2 != null) {
+//					res = dcmp(cv1, cv2, i instanceof DCMPG ? 1 : -1);
+//					pops = 2;
+//				}
+			} else if(i instanceof FCMPG || i instanceof FCMPL) {
+//				ConstantValue cv2 = asConstantValue(inFrame.peek());
+//				ConstantValue cv1 = asConstantValue(inFrame.peek(1));
+//				if(cv1 != null && cv2 != null) {
+//					res = fcmp(cv1, cv2, i instanceof FCMPG ? 1 : -1);
+//					pops = 2;
+//				}
+			} else if(i instanceof LCMP) {
+//				ConstantValue cv2 = asConstantValue(inFrame.peek());
+//				ConstantValue cv1 = asConstantValue(inFrame.peek(1));
+//				if(cv1 != null && cv2 != null) {
+//					res = lcmp(cv1, cv2);
+//					pops = 2;
+//				}
+			}
+			if(res != null) {
+				replaceConstantInstruction(cpg, ih, res);
+			}
+
+			// We need to pop the operands off the stack but for
+			// simplicity sake wrt control flow, we assume they are constant ProducedValues
+			// and we remove the producers of the values.
+			for(int j=0; j < pops; j++) {
+				removeProducers((ProducedValue) inFrame.peek(j));
+			}
+			
+			change |= (res != null || pops > 0);
+		}
+		return change;
+	}
+	
+	private void removeProducers(ProducedValue pv) {
+		for(InstructionHandle ih : pv.getProducers()) {
+			ih.setInstruction(new NOP());
+		}
+	}
+	
+	private Number lcmp(ConstantValue cv1, ConstantValue cv2) {
+		long n1 = ((Number) cv1.getConstant()).longValue();
+		long n2 = ((Number) cv2.getConstant()).longValue();
+		return Long.compare(n1, n2);
+	}
+	
+	private Number fcmp(ConstantValue cv1, ConstantValue cv2, int b) {
+		float n1 = ((Number) cv1.getConstant()).floatValue();
+		float n2 = ((Number) cv2.getConstant()).floatValue();
+		if(Float.isNaN(n2) || Float.isNaN(n2)) {
+			return b;
+		} else {
+			return (int)Math.signum(Float.compare(n1, n2));
+		}
+	}
+	
+	private Number dcmp(ConstantValue cv1, ConstantValue cv2, int b) {
+		double n1 = ((Number) cv1.getConstant()).doubleValue();
+		double n2 = ((Number) cv2.getConstant()).doubleValue();
+		if(Double.isNaN(n1) || Double.isNaN(n1)) {
+			return b;
+		} else {
+			return (int)Math.signum(Double.compare(n1, n2));
+		}
+	}
+	
+	private boolean unaryConstantBranch(int op, ConstantValue cv) {
+		Number n = (Number) cv.getConstant();
+		switch(op) {
+			case 0x99: // IFEQ
+				return n.intValue() == 0;
+			case 0x9c: // IFGE
+				return n.intValue() >= 0;
+			case 0x9d: // IFGT
+				return n.intValue() > 0;
+			case 0x9e: // IFLE
+				return n.intValue() <= 0;
+			case 0x9b: // IFLT
+				return n.intValue() < 0;
+			case 0x9a: // IFNE
+				return n.intValue() != 0;
+			default:
+				throw new UnsupportedOperationException("0x" + op);
+		}
+	}
+	
+	private boolean binaryConstantBranch(int op, ConstantValue cv1, ConstantValue cv2) {
+		Number n1 = (Number) cv1.getConstant();
+		Number n2 = (Number) cv2.getConstant();
+		switch(op) {
+			case 0x9f: // IF_ICMPEQ
+				return n1.intValue() == n2.intValue();
+			case 0xa0: // IF_ICMPNE
+				return n1.intValue() != n2.intValue();
+			case 0xa1: // IF_ICMPLT
+				return n1.intValue() < n2.intValue();
+			case 0xa2: // IF_ICMPGE
+				return n1.intValue() >= n2.intValue();
+			case 0xa3: // IF_ICMPLGT
+				return n1.intValue() > n2.intValue();
+			case 0xa4: // IF_ICMPLE
+				return n1.intValue() <= n2.intValue();
+			default:
+				throw new UnsupportedOperationException("0x" + op);
+		}
+	}
+	
+	private Number castConstant(ConstantValue cv, Type to) {
+		Number n = (Number) cv.getConstant();
+		if(to == Type.FLOAT) {
+			return n.floatValue();
+		} else if(to == Type.DOUBLE) {
+			return n.doubleValue();
+		} else if(to == Type.INT) {
+			return n.intValue();
+		} else if(to == Type.LONG) {
+			return n.longValue();
+		} else {
+			throw new UnsupportedOperationException(to.toString());
+		}
+	}
+	
+	private Number foldBinaryArithmeticOp(int op, ConstantValue cv1, ConstantValue cv2) {
+		Number n1 = (Number) cv1.getConstant();
+		Number n2 = (Number) cv2.getConstant();
+		Number res;
+		switch(op) {
+			case 0x63: // DADD
+				res = n1.doubleValue() + n2.doubleValue();
+				break;
+			case 0x6f: // DDIV:
+				res = n1.doubleValue() / n2.doubleValue();
+				break;
+			case 0x6b: // DMUL
+				res = n1.doubleValue() * n2.doubleValue();
+				break;
+			case 0x73: // DREM
+				res = n1.doubleValue() % n2.doubleValue();
+				break;
+			case 0x67: // DSUB
+				res = n1.doubleValue() - n2.doubleValue();
+				break;
+			case 0x62: // FADD
+				res = n1.floatValue() + n2.floatValue();
+				break;
+			case 0x6e: // FDIV
+				res = n1.floatValue() / n2.floatValue();
+				break;
+			case 0x6a: // FMUL
+				res = n1.floatValue() * n2.floatValue();
+				break;
+			case 0x72: // FREM
+				res = n1.floatValue() % n2.floatValue();
+				break;
+			case 0x66: // FSUB
+				res = n1.floatValue() - n2.floatValue();
+				break;
+			case 0x60: // IADD
+				res = n1.intValue() + n2.intValue();
+				break;
+			case 0x7e: // IAND
+				res = n1.intValue() & n2.intValue();
+				break;
+			case 0x6c: // IDIV
+				res = n1.intValue() / n2.intValue();
+				break;
+			case 0x68: // IMUL
+				res = n1.intValue() * n2.intValue();
+				break;
+			case 0x80: // IOR
+				res = n1.intValue() | n2.intValue();
+				break;
+			case 0x70: // IREM
+				res = n1.intValue() % n2.intValue();
+				break;
+			case 0x78: // ISHL
+				res = n1.intValue() << n2.intValue();
+				break;
+			case 0x7a: // ISHR
+				res = n1.intValue() >> n2.intValue();
+				break;
+			case 0x64: // ISUB
+				res = n1.intValue() - n2.intValue();
+				break;
+			case 0x7c: // IUSHR
+				res = n1.intValue() >>> n2.intValue();
+				break;
+			case 0x82: // IXOR
+				res = n1.intValue() ^ n2.intValue();
+				break;
+			case 0x61: // LADD
+				res = n1.longValue() + n2.longValue();
+			case 0x7f: // LAND
+				res = n1.longValue() & n2.longValue();
+				break;
+			case 0x6d: // LDIV
+				res = n1.longValue() / n2.longValue();
+				break;
+			case 0x69: // LMUL
+				res = n1.longValue() * n2.longValue();
+				break;
+			case 0x81: // LOR
+				res = n1.longValue() | n2.longValue();
+				break;
+			case 0x71: // LREM
+				res = n1.longValue() % n2.longValue();
+				break;
+			case 0x79: // LSHL
+				res = n1.longValue() << n2.longValue();
+				break;
+			case 0x7b: // LSHR
+				res = n1.longValue() >> n2.longValue();
+				break;
+			case 0x65: // LSUB
+				res = n1.longValue() - n2.longValue();
+				break;
+			case 0x7d: // LUSHR
+				res = n1.longValue() >>> n2.longValue();
+				break;
+			case 0x83: // LXOR
+				res = n1.longValue() ^ n2.longValue();
+				break;
+			default:
+				throw new UnsupportedOperationException("0x" + op);
+		}
+		return res;
+	}
+	
+	private Number foldConstantNegation(int op, ConstantValue cv) {
+		Number n = (Number) cv.getConstant();
+		Number res;
+		switch(op) {
+			case 0x74:
+				res = -n.intValue();
+				break;
+			case 0x75:
+				res = -n.longValue();
+				break;
+			case 0x76:
+				res = -n.floatValue();
+				break;
+			case 0x77:
+				res = -n.doubleValue();
+				break;
+			default:
+				throw new IllegalArgumentException("0x" + op);
+		}
+		return res;
+	}
+	
+	private ConstantValue asConstantValue(Value v) {
+		/* If it's not produced, it was defined as a parameter */
+		if(v instanceof ProducedValue) {
+			v = ((ProducedValue) v).getCoreValue();
+		}
+		if(v instanceof ConstantValue) {
+			return (ConstantValue) v;
+		} else {
+			return null;
+		}
+	}
+	
+	private boolean replaceConstantInstruction(ConstantPoolGen cpg, InstructionHandle ih, Number n) {
 		Instruction i;
 		if(n instanceof Float) {
 			i = new LDC(cpg.addFloat(n.floatValue()));

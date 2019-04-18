@@ -49,6 +49,10 @@ public class Frame {
 	public Value pop() {
 		return stack.pop();
 	}
+	
+	public Value peek(int i) {
+		return stack.get(i);
+	}
 
 	public Value peek() {
 		return stack.peek();

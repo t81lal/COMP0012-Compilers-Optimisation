@@ -108,7 +108,7 @@ public class StaticInterpreter {
 				LDC ldc = (LDC) i;
 				Object o = ldc.getValue(cpg);
 				if (o instanceof Number) {
-					cur.push(new ConstantValue(type, 0), ih);
+					cur.push(new ConstantValue(type, o), ih);
 				} else {
 					cur.push(new TopValue(type), ih);
 				}

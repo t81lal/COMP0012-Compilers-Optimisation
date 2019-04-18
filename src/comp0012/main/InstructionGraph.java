@@ -22,6 +22,10 @@ public class InstructionGraph {
 		build();
 	}
 	
+	public void remove(InstructionHandle ih) {
+		successors.remove(ih);
+	}
+	
 	public Set<InstructionHandle> getSuccessors(InstructionHandle ih) {
 		return new HashSet<>(successors.get(ih));
 	}

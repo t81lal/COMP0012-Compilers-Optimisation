@@ -1,6 +1,10 @@
 package comp0012.target;
 
 public class DynamicVariableFolding {
+	
+	public static void main(String[] args) {
+		System.out.println(new DynamicVariableFolding().methodTwo());
+	}
     public int methodOne() {
         int a = 42;
         int b = (a + 764) * 3;

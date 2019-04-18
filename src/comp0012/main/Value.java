@@ -175,7 +175,7 @@ public interface Value {
 		@Override
 		public Value merge(Value v) {
 			if(v instanceof ProducedValue) {
-				ProducedValue pv = new ProducedValue(val.merge(v), new HashSet<>());
+				ProducedValue pv = new ProducedValue(val.merge(((ProducedValue) v).getCoreValue()), new HashSet<>());
 				pv.producers.addAll(producers);
 				pv.producers.addAll(((ProducedValue) v).producers);
 				return pv;
