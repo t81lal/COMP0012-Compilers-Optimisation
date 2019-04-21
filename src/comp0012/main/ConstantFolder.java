@@ -6,124 +6,93 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Set;
 
+import org.apache.bcel.classfile.ClassFormatException;
 import org.apache.bcel.classfile.ClassParser;
 import org.apache.bcel.classfile.JavaClass;
 import org.apache.bcel.classfile.Method;
-import org.apache.bcel.generic.*;
+import org.apache.bcel.generic.ArithmeticInstruction;
+import org.apache.bcel.generic.ClassGen;
+import org.apache.bcel.generic.ConversionInstruction;
+import org.apache.bcel.generic.DCMPG;
+import org.apache.bcel.generic.DCMPL;
+import org.apache.bcel.generic.FCMPG;
+import org.apache.bcel.generic.FCMPL;
+import org.apache.bcel.generic.IfInstruction;
+import org.apache.bcel.generic.Instruction;
+import org.apache.bcel.generic.InstructionFactory;
+import org.apache.bcel.generic.InstructionHandle;
+import org.apache.bcel.generic.InstructionList;
+import org.apache.bcel.generic.LCMP;
+import org.apache.bcel.generic.LDC;
+import org.apache.bcel.generic.LDC2_W;
+import org.apache.bcel.generic.LoadInstruction;
+import org.apache.bcel.generic.MethodGen;
+import org.apache.bcel.generic.StoreInstruction;
+import org.apache.bcel.generic.Type;
+import org.plumelib.bcelutil.InstructionListUtils;
 
 import comp0012.main.Value.ConstantValue;
 import comp0012.main.Value.ProducedValue;
 
-public class ConstantFolder {
-	ClassParser parser = null;
+public class ConstantFolder extends InstructionListUtils {
+
 	ClassGen gen = null;
-
-	JavaClass original = null;
-	JavaClass optimized = null;
-
-	public ConstantFolder(String classFilePath) {
+	
+	public ConstantFolder(String file) throws ClassFormatException, IOException {
+		ClassParser parser = new ClassParser(file);
+		JavaClass original = parser.parse();
+		gen = new ClassGen(original);
+	}
+	
+	public void write(String optimisedFilePath) {
+		optimise(gen);
+		JavaClass optimized = gen.getJavaClass();
 		try {
-			parser = new ClassParser(classFilePath);
-			original = parser.parse();
-			gen = new ClassGen(original);
+			FileOutputStream out = new FileOutputStream(
+					new File(optimisedFilePath));
+			optimized.dump(out);
+		} catch (FileNotFoundException e) {
+			// Auto-generated catch block
+			e.printStackTrace();
 		} catch (IOException e) {
+			// Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
-
-	public void optimize() {
-		ConstantPoolGen cpgen = gen.getConstantPool();
-		Method[] methods = gen.getMethods();
-		for (int i=0; i < methods.length; i++) {
-			Method m = methods[i];
-			if(!(gen.getClassName() + "." + m.getName()).equals("comp0012.target.DynamicVariableFolding.methodTwo"))
-				continue;
-			System.out.println(gen.getClassName() + "." + m.getName());
-			MethodGen mg = new MethodGen(m, gen.getClassName(), cpgen);
-			boolean change;
-			do {
-				change = false;
-				change = optimise(mg);
-			} while(change);
-			mg.removeNOPs();
-			System.out.println(mg.getInstructionList());
-//			mg.stripAttributes(true);
-			System.out.println(mg.getCodeAttributes()[0]);
-			gen.setMethodAt(mg.getMethod(), i);
+	
+	public void optimise(ClassGen cg) {
+		for(Method m : cg.getMethods()) {
+			optimise(cg, m);
 		}
-		optimized = gen.getJavaClass();
-	}
-
-	private boolean optimise(MethodGen mg) {
-		System.out.println(mg.getInstructionList());
-		boolean change = false;
-		change |= propagateConstants(mg);
-		change |= foldConstants(mg);
-		change |= removeDeadAssignments(mg);
-//		change |= removeDeadCode(mg);
-		System.out.println("==========");
-		System.out.println(mg.getInstructionList());
-		return change;
 	}
 	
-	private boolean removeDeadCode(MethodGen mg) {
-		InstructionGraph cfg = new InstructionGraph(mg);
-		boolean change = false;
-		InstructionHandle start = mg.getInstructionList().getStart();
-		for(InstructionHandle ih : mg.getInstructionList().getInstructionHandles()) {
-			if(ih.equals(start))
-				continue;
-			if(cfg.getPredecessors(ih).size() == 0) {
-				change = true;
-				try {
-					cfg.remove(ih);
-					mg.getInstructionList().delete(ih);
-				} catch (TargetLostException e) {
-				}
-			}
-		}
-		return change;
-	}
-	
-	private boolean removeDeadAssignments(MethodGen mg) {
-		LivenessAnalysis la = new LivenessAnalysis(mg);
-		la.solve();
+	public void optimise(ClassGen cg, Method m) {
+		pool = cg.getConstantPool();
+		MethodGen mg = new MethodGen(m, cg.getClassName(), pool);
+		set_current_stack_map_table(mg, cg.getMajor());
+		fix_local_variable_table(mg);
 		
-		FrameAnalysis fa = new FrameAnalysis(mg);
-		fa.solve();
-
-		boolean change = false;
-		InstructionList list = mg.getInstructionList();
-		for (InstructionHandle ih : list.getInstructionHandles()) {
-			Instruction i = ih.getInstruction();
-			if(i instanceof StoreInstruction) {
-				StoreInstruction si = (StoreInstruction) i;
-				Set<Integer> liveOut = la.getOutFact(ih);
-				/* assignment is unused, remove it if we can */
-				if(!liveOut.contains(si.getIndex())) {
-					/* The top element on the stack of the pre-execution frame
-					 * contains the value that will be stored when this instruction is executed.
-					 * For now, we can remove it if it's a constant (TODO: simple side effect decisions). */
-					Frame inFrame = fa.getInFact(ih);
-					ProducedValue pv = (ProducedValue) inFrame.peek();
-					Value v = pv.getCoreValue();
-					if(v instanceof ConstantValue) {
-						removeProducers(pv);
-						ih.setInstruction(new NOP());
-						change = true;
-					}
-				}
-			}
-		}
+		boolean change;
+		do {
+			change = false;
+			change |= propagateConstants(mg);
+			
+			change |= foldConstants(mg);
+			change |= removeDeadAssignments(mg);
+			
+		} while(change);
 		
-		return change;
+		mg.setMaxStack();
+		mg.setMaxLocals();
+		mg.update();
+		
+		cg.replaceMethod(m, mg.getMethod());
 	}
 	
 	private boolean propagateConstants(MethodGen mg) {
 		FrameAnalysis fa = new FrameAnalysis(mg);
 		fa.solve();
 		
-		ConstantPoolGen cpg = mg.getConstantPool();
 		InstructionList list = mg.getInstructionList();
 		boolean change = false;
 		
@@ -136,7 +105,7 @@ public class ConstantFolder {
 				if(constLocal != null) {
 					Object cst = constLocal.getConstant();
 					if(cst instanceof Number) {
-						change |= replaceConstantInstruction(cpg, ih, (Number) cst);
+						change |= toInsn(mg, ih, (Number) cst);
 					}
 				}
 			}
@@ -148,7 +117,6 @@ public class ConstantFolder {
 		FrameAnalysis fa = new FrameAnalysis(mg);
 		fa.solve();
 		
-		ConstantPoolGen cpg = mg.getConstantPool();
 		InstructionList list = mg.getInstructionList();
 		boolean change = false;
 		for (InstructionHandle ih : list.getInstructionHandles()) {
@@ -179,7 +147,7 @@ public class ConstantFolder {
 				ConversionInstruction ci = (ConversionInstruction) i;
 				ConstantValue cv = asConstantValue(inFrame.peek());
 				if(cv != null) {
-					res = castConstant(cv, ci.getType(cpg));
+					res = castConstant(cv, ci.getType(pool));
 					pops = 1;
 				}
 			} else if(i instanceof IfInstruction) {
@@ -209,43 +177,45 @@ public class ConstantFolder {
 				// Handle the actual modification here and pop args as usual below
 				if(decided) {
 					if(decision) {
-						ih.swapInstruction(new GOTO(ifi.getTarget().getPrev()));
-						InstructionFactory.create
+						
+						InstructionList il2 = new InstructionList(InstructionFactory.createBranchInstruction((short)0xa7, ifi.getTarget()));
+						insert_before_handle(mg, ih.getPrev(), il2, true);
+						delete_instructions(mg, ih, ih);
 					} else {
-						ih.swapInstruction(new NOP());
+						delete_instructions(mg, ih, ih);
 					}
 				}
 			} else if(i instanceof DCMPG || i instanceof DCMPL) {
-//				ConstantValue cv2 = asConstantValue(inFrame.peek());
-//				ConstantValue cv1 = asConstantValue(inFrame.peek(1));
-//				if(cv1 != null && cv2 != null) {
-//					res = dcmp(cv1, cv2, i instanceof DCMPG ? 1 : -1);
-//					pops = 2;
-//				}
+				ConstantValue cv2 = asConstantValue(inFrame.peek());
+				ConstantValue cv1 = asConstantValue(inFrame.peek(1));
+				if(cv1 != null && cv2 != null) {
+					res = dcmp(cv1, cv2, i instanceof DCMPG ? 1 : -1);
+					pops = 2;
+				}
 			} else if(i instanceof FCMPG || i instanceof FCMPL) {
-//				ConstantValue cv2 = asConstantValue(inFrame.peek());
-//				ConstantValue cv1 = asConstantValue(inFrame.peek(1));
-//				if(cv1 != null && cv2 != null) {
-//					res = fcmp(cv1, cv2, i instanceof FCMPG ? 1 : -1);
-//					pops = 2;
-//				}
+				ConstantValue cv2 = asConstantValue(inFrame.peek());
+				ConstantValue cv1 = asConstantValue(inFrame.peek(1));
+				if(cv1 != null && cv2 != null) {
+					res = fcmp(cv1, cv2, i instanceof FCMPG ? 1 : -1);
+					pops = 2;
+				}
 			} else if(i instanceof LCMP) {
-//				ConstantValue cv2 = asConstantValue(inFrame.peek());
-//				ConstantValue cv1 = asConstantValue(inFrame.peek(1));
-//				if(cv1 != null && cv2 != null) {
-//					res = lcmp(cv1, cv2);
-//					pops = 2;
-//				}
+				ConstantValue cv2 = asConstantValue(inFrame.peek());
+				ConstantValue cv1 = asConstantValue(inFrame.peek(1));
+				if(cv1 != null && cv2 != null) {
+					res = lcmp(cv1, cv2);
+					pops = 2;
+				}
 			}
 			if(res != null) {
-				replaceConstantInstruction(cpg, ih, res);
+				toInsn(mg, ih, res);
 			}
 
 			// We need to pop the operands off the stack but for
 			// simplicity sake wrt control flow, we assume they are constant ProducedValues
 			// and we remove the producers of the values.
 			for(int j=0; j < pops; j++) {
-				removeProducers((ProducedValue) inFrame.peek(j));
+				removeProducers(mg, (ProducedValue) inFrame.peek(j));
 			}
 			
 			change |= (res != null || pops > 0);
@@ -253,9 +223,43 @@ public class ConstantFolder {
 		return change;
 	}
 	
-	private void removeProducers(ProducedValue pv) {
+	private boolean removeDeadAssignments(MethodGen mg) {
+		LivenessAnalysis la = new LivenessAnalysis(mg);
+		la.solve();
+		
+		FrameAnalysis fa = new FrameAnalysis(mg);
+		fa.solve();
+
+		boolean change = false;
+		InstructionList list = mg.getInstructionList();
+		for (InstructionHandle ih : list.getInstructionHandles()) {
+			Instruction i = ih.getInstruction();
+			if(i instanceof StoreInstruction) {
+				StoreInstruction si = (StoreInstruction) i;
+				Set<Integer> liveOut = la.getOutFact(ih);
+				/* assignment is unused, remove it if we can */
+				if(!liveOut.contains(si.getIndex())) {
+					/* The top element on the stack of the pre-execution frame
+					 * contains the value that will be stored when this instruction is executed.
+					 * For now, we can remove it if it's a constant (TODO: simple side effect decisions). */
+					Frame inFrame = fa.getInFact(ih);
+					ProducedValue pv = (ProducedValue) inFrame.peek();
+					Value v = pv.getCoreValue();
+					if(v instanceof ConstantValue) {
+						removeProducers(mg, pv);
+						delete_instructions(mg, ih, ih);
+						change = true;
+					}
+				}
+			}
+		}
+		
+		return change;
+	}
+	
+	private void removeProducers(MethodGen mg, ProducedValue pv) {
 		for(InstructionHandle ih : pv.getProducers()) {
-			ih.setInstruction(new NOP());
+			delete_instructions(mg, ih, ih);
 		}
 	}
 	
@@ -469,6 +473,23 @@ public class ConstantFolder {
 		return res;
 	}
 	
+	private boolean toInsn(MethodGen mg, InstructionHandle ih, Number n) {
+		Instruction i;
+		if(n instanceof Float) {
+			i = new LDC(pool.addFloat(n.floatValue()));
+		} else if(n instanceof Integer) {
+			i = new LDC(pool.addInteger(n.intValue()));
+		} else if(n instanceof Double) {
+			i = new LDC2_W(pool.addDouble(n.doubleValue()));
+		} else if(n instanceof Long) {
+			i = new LDC2_W(pool.addLong(n.longValue()));
+		} else {
+			return false;
+		}
+		replace_instructions(mg, mg.getInstructionList(), ih, build_il(i));
+		return true;
+	}
+	
 	private ConstantValue asConstantValue(Value v) {
 		/* If it's not produced, it was defined as a parameter */
 		if(v instanceof ProducedValue) {
@@ -478,39 +499,6 @@ public class ConstantFolder {
 			return (ConstantValue) v;
 		} else {
 			return null;
-		}
-	}
-	
-	private boolean replaceConstantInstruction(ConstantPoolGen cpg, InstructionHandle ih, Number n) {
-		Instruction i;
-		if(n instanceof Float) {
-			i = new LDC(cpg.addFloat(n.floatValue()));
-		} else if(n instanceof Integer) {
-			i = new LDC(cpg.addInteger(n.intValue()));
-		} else if(n instanceof Double) {
-			i = new LDC2_W(cpg.addDouble(n.doubleValue()));
-		} else if(n instanceof Long) {
-			i = new LDC2_W(cpg.addLong(n.longValue()));
-		} else {
-			return false;
-		}
-		ih.setInstruction(i);
-		return true;
-	}
-
-	public void write(String optimisedFilePath) {
-		this.optimize();
-
-		try {
-			FileOutputStream out = new FileOutputStream(
-					new File(optimisedFilePath));
-			optimized.dump(out);
-		} catch (FileNotFoundException e) {
-			// Auto-generated catch block
-			e.printStackTrace();
-		} catch (IOException e) {
-			// Auto-generated catch block
-			e.printStackTrace();
 		}
 	}
 }

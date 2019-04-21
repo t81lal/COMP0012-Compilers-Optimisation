@@ -3,7 +3,7 @@ package comp0012.target;
 public class DynamicVariableFolding {
 	
 	public static void main(String[] args) {
-		System.out.println(new DynamicVariableFolding().methodTwo());
+		System.out.println(new DynamicVariableFolding().methodFour());
 	}
     public int methodOne() {
         int a = 42;

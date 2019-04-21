@@ -60,7 +60,8 @@ public class Main extends SimpleFileVisitor<Path> {
     public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
         String fname = file.toString();
         if(fname.endsWith(".class") && !fname.endsWith("Main.class") && !fname.endsWith("ConstantFolder.class")){
-            ConstantFolder cf = new ConstantFolder(file.toString());
+//            ConstantFolder cf = new ConstantFolder(file.toString());
+        	ConstantFolder cf = new ConstantFolder(file.toString());
             Path rel = Paths.get(inputRoot).relativize(file);
             cf.write(Paths.get(outputRoot, rel.toString()).toAbsolutePath().toString());
         }
