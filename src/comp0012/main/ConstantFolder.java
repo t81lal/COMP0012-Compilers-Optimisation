@@ -62,7 +62,11 @@ public class ConstantFolder extends InstructionListUtils {
 	
 	public void optimise(ClassGen cg) {
 		for(Method m : cg.getMethods()) {
-			optimise(cg, m);
+			try {
+				optimise(cg, m);
+			} catch(Throwable t) {
+				System.err.println("Couldn't optimise " + cg.getClassName() + "." + m.getName() + ": " + t.getMessage());
+			}
 		}
 	}
 	
@@ -168,8 +172,6 @@ public class ConstantFolder extends InstructionListUtils {
 						if(cv1 != null && cv2 != null) {
 							decided = true;
 							decision = binaryConstantBranch(op, cv1, cv2);
-							System.out.println(op + " " + cv1 + " " + cv2);
-							System.out.println(decision);
 							pops = 2;
 						}
 					}

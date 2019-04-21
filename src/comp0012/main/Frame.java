@@ -102,10 +102,10 @@ public class Frame {
 	public static Frame merge(Frame f1, Frame f2) {
 		Frame merged = new Frame(f1.locals.length);
 		if (f1.stack.size() != f2.stack.size()) {
-			System.err.println("F1:");
-			System.err.print(f1);
-			System.err.println("===================\nF2:");
-			System.err.print(f2);
+//			System.err.println("F1:");
+//			System.err.print(f1);
+//			System.err.println("===================\nF2:");
+//			System.err.print(f2);
 			throw new IllegalArgumentException("Stack height mismatch");
 		} else {
 			for (int i = 0; i < f1.stack.size(); i++) {
@@ -115,18 +115,12 @@ public class Frame {
 		for (int i = 0; i < merged.locals.length; i++) {
 			Value l1 = f1.locals[i],
 				  l2 = f2.locals[i];
-			if(l1 == null) {
-				if(l2 == null) {
-					merged.locals[i] = null;
-				} else {
-					throw new IllegalStateException("l1 null, l2 nonnull");
-				}
-			} else {
-				if(l2 == null) {
-					throw new IllegalStateException("l2 null, l1 nonnull");
-				} else {
-					merged.locals[i] = l1.merge(l2);
-				}
+			if(l1 != null && l2 != null) {
+				merged.locals[i] = l1.merge(l2);
+			} else if(l1 == null) {
+				merged.locals[i] = l2;
+			} else if(l2 == null) {
+				merged.locals[i] = l1;
 			}
 		}
 		return merged;

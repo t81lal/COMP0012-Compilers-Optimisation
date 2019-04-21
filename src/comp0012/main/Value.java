@@ -62,7 +62,7 @@ public interface Value {
 			if(v.getType().equals(type)) {
 				return this;
 			} else {
-				throw new UnsupportedOperationException();
+				throw new UnsupportedOperationException(v.getClass() + "|" + type);
 			}
 		}
 		
