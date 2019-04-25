@@ -7,6 +7,9 @@ import org.junit.Before;
 import static org.junit.Assert.assertEquals;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.util.Arrays;
+
+import comp0012.target.SimpleFolding;
 
 /**
  * test simple folding
@@ -32,7 +35,11 @@ public class SimpleFoldingTest {
     @Test
     public void testSimple(){
         sf.simple();
-        assertEquals("12412\n", outContent.toString());
+        String s = outContent.toString();
+//        for(char c : s.toCharArray()) {
+//        	System.err.println("C: " + (int)c);
+//        }
+        assertEquals("12412" + System.lineSeparator(), s);
     }
 
 }

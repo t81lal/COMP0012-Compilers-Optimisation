@@ -62,7 +62,8 @@ public interface Value {
 			if(v.getType().equals(type)) {
 				return this;
 			} else {
-				throw new UnsupportedOperationException(v.getClass() + "|" + type);
+//				throw new UnsupportedOperationException(v + "|" + type);
+				return new TopValue(Type.OBJECT);
 			}
 		}
 		

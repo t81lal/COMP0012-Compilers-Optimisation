@@ -8,7 +8,14 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
-import org.apache.bcel.generic.*;
+import org.apache.bcel.generic.ATHROW;
+import org.apache.bcel.generic.BranchInstruction;
+import org.apache.bcel.generic.GotoInstruction;
+import org.apache.bcel.generic.Instruction;
+import org.apache.bcel.generic.InstructionHandle;
+import org.apache.bcel.generic.MethodGen;
+import org.apache.bcel.generic.ReturnInstruction;
+import org.apache.bcel.generic.Select;
 
 public class InstructionGraph {
 
@@ -63,5 +70,19 @@ public class InstructionGraph {
 		for (InstructionHandle ih = mg.getInstructionList().getStart(); ih != null; ih = ih.getNext()) {
 			successors.put(ih, findSuccessors(ih));
 		}
+	}
+	
+	public String toDotGraph() {
+		StringBuilder sb = new StringBuilder();
+		sb.append("digraph {\n");
+		for(InstructionHandle ih : successors.keySet()) {
+			sb.append("  ").append(ih.getPosition()).append(" [label=\"").append(ih.toString()).append("\"];").append("\n");
+		}
+		for(Entry<InstructionHandle, Set<InstructionHandle>> e : successors.entrySet()) {
+			for(InstructionHandle s : e.getValue()) {
+				sb.append("  ").append(e.getKey().getPosition()).append(" -> ").append(s.getPosition()).append(";\n");
+			}
+		}
+		return sb.append("}").toString();
 	}
 }

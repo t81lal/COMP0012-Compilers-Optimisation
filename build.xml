@@ -59,7 +59,7 @@
   <!-- build optimisation code-->
   <target name="compile.source" description="Compile module part2; production classes">
     <mkdir dir="${classes.dir}"/>
-    <javac destdir="${classes.dir}" debug="${compiler.debug}" nowarn="${compiler.generate.no.warnings}" fork="true" includeantruntime="false">
+    <javac source="1.8" target="1.8" destdir="${classes.dir}" debug="${compiler.debug}" nowarn="${compiler.generate.no.warnings}" fork="true" includeantruntime="false">
       <classpath refid="library.classpath"/>
       <src refid="sources.dir"/>
       <patternset refid="ignored.files"/>
@@ -84,7 +84,7 @@
   <!-- build JUnit test cases -->
   <target name="compile.tests" depends="compile.source" description="compile module part2; test classes" unless="skip.tests">
     <mkdir dir="${tests.dir}"/>
-    <javac destdir="${tests.dir}" fork="true" includeantruntime="false">
+    <javac source="1.8" target="1.8" destdir="${tests.dir}" fork="true" includeantruntime="false">
       <classpath refid="test.original.classpath"/>
       <src refid="testsource.dir"/>
       <patternset refid="ignored.files"/>

@@ -1,6 +1,75 @@
 package comp0012.main;
 
-import org.apache.bcel.generic.*;
+import org.apache.bcel.generic.AALOAD;
+import org.apache.bcel.generic.ACONST_NULL;
+import org.apache.bcel.generic.ANEWARRAY;
+import org.apache.bcel.generic.ARRAYLENGTH;
+import org.apache.bcel.generic.ATHROW;
+import org.apache.bcel.generic.ArithmeticInstruction;
+import org.apache.bcel.generic.ArrayInstruction;
+import org.apache.bcel.generic.BALOAD;
+import org.apache.bcel.generic.BranchInstruction;
+import org.apache.bcel.generic.CALOAD;
+import org.apache.bcel.generic.CHECKCAST;
+import org.apache.bcel.generic.CPInstruction;
+import org.apache.bcel.generic.ConstantPoolGen;
+import org.apache.bcel.generic.ConstantPushInstruction;
+import org.apache.bcel.generic.ConversionInstruction;
+import org.apache.bcel.generic.DALOAD;
+import org.apache.bcel.generic.DCMPG;
+import org.apache.bcel.generic.DCMPL;
+import org.apache.bcel.generic.DUP;
+import org.apache.bcel.generic.FALOAD;
+import org.apache.bcel.generic.FCMPG;
+import org.apache.bcel.generic.FCMPL;
+import org.apache.bcel.generic.FieldInstruction;
+import org.apache.bcel.generic.FieldOrMethod;
+import org.apache.bcel.generic.GETFIELD;
+import org.apache.bcel.generic.GETSTATIC;
+import org.apache.bcel.generic.GotoInstruction;
+import org.apache.bcel.generic.IALOAD;
+import org.apache.bcel.generic.IFEQ;
+import org.apache.bcel.generic.IFGE;
+import org.apache.bcel.generic.IFGT;
+import org.apache.bcel.generic.IFLE;
+import org.apache.bcel.generic.IFLT;
+import org.apache.bcel.generic.IFNE;
+import org.apache.bcel.generic.IFNONNULL;
+import org.apache.bcel.generic.IFNULL;
+import org.apache.bcel.generic.IINC;
+import org.apache.bcel.generic.INSTANCEOF;
+import org.apache.bcel.generic.INVOKEDYNAMIC;
+import org.apache.bcel.generic.INVOKEINTERFACE;
+import org.apache.bcel.generic.INVOKESPECIAL;
+import org.apache.bcel.generic.INVOKEVIRTUAL;
+import org.apache.bcel.generic.IfInstruction;
+import org.apache.bcel.generic.Instruction;
+import org.apache.bcel.generic.InstructionHandle;
+import org.apache.bcel.generic.InvokeInstruction;
+import org.apache.bcel.generic.LALOAD;
+import org.apache.bcel.generic.LCMP;
+import org.apache.bcel.generic.LDC;
+import org.apache.bcel.generic.LDC2_W;
+import org.apache.bcel.generic.LoadInstruction;
+import org.apache.bcel.generic.LocalVariableInstruction;
+import org.apache.bcel.generic.MONITORENTER;
+import org.apache.bcel.generic.MONITOREXIT;
+import org.apache.bcel.generic.MULTIANEWARRAY;
+import org.apache.bcel.generic.NEW;
+import org.apache.bcel.generic.NEWARRAY;
+import org.apache.bcel.generic.NOP;
+import org.apache.bcel.generic.POP;
+import org.apache.bcel.generic.POP2;
+import org.apache.bcel.generic.PUTFIELD;
+import org.apache.bcel.generic.PUTSTATIC;
+import org.apache.bcel.generic.ReturnInstruction;
+import org.apache.bcel.generic.SALOAD;
+import org.apache.bcel.generic.SWAP;
+import org.apache.bcel.generic.Select;
+import org.apache.bcel.generic.StackInstruction;
+import org.apache.bcel.generic.StoreInstruction;
+import org.apache.bcel.generic.Type;
+import org.apache.bcel.generic.TypedInstruction;
 
 import comp0012.main.Value.ConstantValue;
 import comp0012.main.Value.TopValue;
@@ -92,7 +161,7 @@ public class StaticInterpreter {
 					if (i instanceof INVOKEDYNAMIC) {
 						throw new UnsupportedOperationException(i.getName());
 					}
-					if (i instanceof INVOKEVIRTUAL || i instanceof INVOKEINTERFACE) {
+					if (i instanceof INVOKEVIRTUAL || i instanceof INVOKEINTERFACE || i instanceof INVOKESPECIAL) {
 						cur.pop(); // instance
 					}
 					InvokeInstruction invoke = (InvokeInstruction) i;

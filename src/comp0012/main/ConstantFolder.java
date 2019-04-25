@@ -6,12 +6,18 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Set;
 
+import org.apache.bcel.Const;
 import org.apache.bcel.classfile.ClassFormatException;
 import org.apache.bcel.classfile.ClassParser;
 import org.apache.bcel.classfile.JavaClass;
 import org.apache.bcel.classfile.Method;
+import org.apache.bcel.classfile.StackMap;
+import org.apache.bcel.classfile.StackMapEntry;
+import org.apache.bcel.classfile.StackMapType;
 import org.apache.bcel.generic.ArithmeticInstruction;
+import org.apache.bcel.generic.BranchInstruction;
 import org.apache.bcel.generic.ClassGen;
+import org.apache.bcel.generic.CodeExceptionGen;
 import org.apache.bcel.generic.ConversionInstruction;
 import org.apache.bcel.generic.DCMPG;
 import org.apache.bcel.generic.DCMPL;
@@ -22,14 +28,19 @@ import org.apache.bcel.generic.Instruction;
 import org.apache.bcel.generic.InstructionFactory;
 import org.apache.bcel.generic.InstructionHandle;
 import org.apache.bcel.generic.InstructionList;
+import org.apache.bcel.generic.InstructionTargeter;
 import org.apache.bcel.generic.LCMP;
 import org.apache.bcel.generic.LDC;
 import org.apache.bcel.generic.LDC2_W;
+import org.apache.bcel.generic.LineNumberGen;
 import org.apache.bcel.generic.LoadInstruction;
+import org.apache.bcel.generic.LocalVariableGen;
 import org.apache.bcel.generic.MethodGen;
 import org.apache.bcel.generic.StoreInstruction;
 import org.apache.bcel.generic.Type;
+import org.apache.bcel.verifier.structurals.OperandStack;
 import org.plumelib.bcelutil.InstructionListUtils;
+import org.plumelib.bcelutil.StackTypes;
 
 import comp0012.main.Value.ConstantValue;
 import comp0012.main.Value.ProducedValue;
@@ -63,18 +74,34 @@ public class ConstantFolder extends InstructionListUtils {
 	public void optimise(ClassGen cg) {
 		for(Method m : cg.getMethods()) {
 			try {
+				cg.setMajor(50);
+				cg.setMinor(0);
 				optimise(cg, m);
 			} catch(Throwable t) {
 				System.err.println("Couldn't optimise " + cg.getClassName() + "." + m.getName() + ": " + t.getMessage());
+				t.printStackTrace();
 			}
 		}
 	}
 	
 	public void optimise(ClassGen cg, Method m) {
 		pool = cg.getConstantPool();
+		if(m.getExceptionTable() != null && m.getExceptionTable().getNumberOfExceptions() > 0) {
+			System.out.printf("Can't optimise %s.%s (exception control flow).\n", cg.getClassName(), m.getName());
+			return;
+		}
+		if(m.getCode() == null) {
+			System.out.printf("Skipping %s.%s (no code).\n", cg.getClassName(), m.getName());
+			return;
+		}
+//		if(!cg.getClassName().equals("comp0012.target.ConstantVariableFolding") || !m.getName().equals("methodThree")) {
+//			return;
+//		}
+		System.out.printf("Processing: %s.%s %s.\n", cg.getClassName(), m.getName(), m.getSignature());
 		MethodGen mg = new MethodGen(m, cg.getClassName(), pool);
 		set_current_stack_map_table(mg, cg.getMajor());
 		fix_local_variable_table(mg);
+		build_unitialized_NEW_map(mg.getInstructionList());
 		
 		boolean change;
 		do {
@@ -88,9 +115,13 @@ public class ConstantFolder extends InstructionListUtils {
 		
 		mg.setMaxStack();
 		mg.setMaxLocals();
+		StackMap sm = new StackMap(pool.addUtf8("StackMapTable"), 0, (StackMapEntry[]) null, pool.getConstantPool());
+		sm.setStackMap(stack_map_table);
+		mg.addCodeAttribute(sm);
 		mg.update();
 		
-		cg.replaceMethod(m, mg.getMethod());
+		Method m2 = mg.getMethod();
+		cg.replaceMethod(m, m2);
 	}
 	
 	private boolean propagateConstants(MethodGen mg) {
@@ -179,10 +210,10 @@ public class ConstantFolder extends InstructionListUtils {
 				// Handle the actual modification here and pop args as usual below
 				if(decided) {
 					if(decision) {
-						
 						InstructionList il2 = new InstructionList(InstructionFactory.createBranchInstruction((short)0xa7, ifi.getTarget()));
-						insert_before_handle(mg, ih.getPrev(), il2, true);
+						InstructionHandle p = ih.getPrev();
 						delete_instructions(mg, ih, ih);
+						insert_before_handle(mg, p, il2, false);
 					} else {
 						delete_instructions(mg, ih, ih);
 					}
@@ -224,7 +255,7 @@ public class ConstantFolder extends InstructionListUtils {
 		}
 		return change;
 	}
-	
+		
 	private boolean removeDeadAssignments(MethodGen mg) {
 		LivenessAnalysis la = new LivenessAnalysis(mg);
 		la.solve();

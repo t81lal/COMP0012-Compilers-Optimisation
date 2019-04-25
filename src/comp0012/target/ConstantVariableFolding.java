@@ -2,6 +2,10 @@ package comp0012.target;
 
 public class ConstantVariableFolding
 {
+	public static void main(String[] args) {
+		System.out.println(new ConstantVariableFolding().methodFour());
+	}
+	
     public int methodOne(){
         int a = 62;
         int b = (a + 764) * 3;

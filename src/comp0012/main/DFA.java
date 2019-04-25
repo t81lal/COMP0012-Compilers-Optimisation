@@ -22,6 +22,7 @@ public abstract class DFA<F> {
 		this.mg = mg;
 		this.backwards = backwards;
 		graph = new InstructionGraph(mg);
+//		System.out.println(graph.toDotGraph());
 		inFacts = new HashMap<>();
 		outFacts = new HashMap<>();
 	}

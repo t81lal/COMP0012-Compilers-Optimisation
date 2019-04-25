@@ -2,6 +2,7 @@ package comp0012.main;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Objects;
 
@@ -32,6 +33,20 @@ public class Frame {
 		stack = new LinkedList<>(other.stack);
 	}
 
+	public String stackToString() {
+		StringBuilder sb = new StringBuilder();
+		sb.append('[');
+		Iterator<Value> it = stack.iterator();
+		while(it.hasNext()) {
+			sb.append(it.next().getType());
+			if(it.hasNext()) {
+				sb.append(", ");
+			}
+		}
+		sb.append("]");
+		return sb.toString();
+	}
+	
 	public Value getLocal(int i) {
 		return locals[i];
 	}
@@ -68,6 +83,9 @@ public class Frame {
 
 	@Override
 	public String toString() {
+//		if("".equals("")) {
+//			return stackToString();
+//		}
 		StringBuilder sb = new StringBuilder();
 		sb.append("Locals:\n");
 		for (int i = 0; i < locals.length; i++) {
@@ -98,14 +116,10 @@ public class Frame {
 		}
 		return frame0;
 	}
-
+	
 	public static Frame merge(Frame f1, Frame f2) {
 		Frame merged = new Frame(f1.locals.length);
 		if (f1.stack.size() != f2.stack.size()) {
-//			System.err.println("F1:");
-//			System.err.print(f1);
-//			System.err.println("===================\nF2:");
-//			System.err.print(f2);
 			throw new IllegalArgumentException("Stack height mismatch");
 		} else {
 			for (int i = 0; i < f1.stack.size(); i++) {
@@ -117,11 +131,12 @@ public class Frame {
 				  l2 = f2.locals[i];
 			if(l1 != null && l2 != null) {
 				merged.locals[i] = l1.merge(l2);
-			} else if(l1 == null) {
-				merged.locals[i] = l2;
-			} else if(l2 == null) {
-				merged.locals[i] = l1;
 			}
+			 else if(l1 == null) {
+					merged.locals[i] = l2;
+				} else if(l2 == null) {
+					merged.locals[i] = l1;
+				}
 		}
 		return merged;
 	}
